@@ -1,10 +1,17 @@
 import numpy as np
+from numpy.typing import NDArray
 from pathlib import Path
+
+from typing import Any, Tuple
+
+
+DataArray = NDArray[np.float64]
+LabelArray = NDArray[np.int_]
 
 def load_data_labels(
     fname_data: str,
     load_args: dict = {},
-) -> Tuple[np.ndarray, np.ndarray]:
+) -> Tuple[DataArray, LabelArray]:
     """
     Load data and labels from .csv, .tsv or .npy files.
 
@@ -21,12 +28,20 @@ def load_data_labels(
     ----------
     fname_data : str
         Full filename to the data file (i.e., including the `_data.ext`)
+    load_args : dict[str, Any], default={}
+        Extra keyword arguments forwarded to ``numpy.load`` or
+        ``numpy.loadtxt``.
 
     Returns
     -------
-    Tuple[np.ndarray, np.ndarray]
+    Tuple[DataArray, LabelArray]
         Data array and labels array loaded from matching ``*_data.ext`` and
         ``*_labels.ext`` files, where `ext` can be "csv", "tsv", or "npy".
+
+    Raises
+    ------
+    ValueError
+        If ``fname_data`` does not use a supported extension.
     """
     # We could directly replace _data without the extension but it's a bit less
     # safe, in case the pattern "_data" appears somewhere else in the path
@@ -45,11 +60,11 @@ def load_data_labels(
     return data, labels
 
 def save_data_labels(
-    X: np.ndarray,
-    y: np.ndarray,
+    X: DataArray,
+    y: LabelArray,
     fnames_root: str,
     force_npy: bool = False,
-    save_args: dict = {},
+    save_args: dict[str, Any] = {},
 ) -> None:
     """
     Save data and labels to .csv or .npy files.
@@ -67,14 +82,25 @@ def save_data_labels(
 
     Parameters
     ----------
-
+    X : DataArray
+        Data array to save.
+    y : LabelArray
+        Label array to save alongside ``X``.
+    fnames_root : str
+        Output path prefix, excluding the ``_data`` or ``_labels`` suffix and
+        file extension.
+    force_npy : bool, default=False
+        Whether to always save with NumPy's binary ``.npy`` format.
+    save_args : dict[str, Any], default={}
+        Extra keyword arguments forwarded to ``numpy.save`` or
+        ``numpy.savetxt``.
 
     Returns
     -------
     None
         This function writes files to disk and returns nothing.
     """
-    p = Path(fname_data)
+    p = Path(fnames_root)
     p.parent.mkdir(parents=True, exist_ok=True)
 
     shape = X.shape
@@ -84,10 +110,35 @@ def save_data_labels(
         ext = "csv"
 
     if ext == "npy":
-        np.save(f"{fname_data}_data.{ext}", X, **save_args)
-        np.save(f"{fname_data}_labels.{ext}", y, **save_args)
+        np.save(f"{fnames_root}_data.{ext}", X, **save_args)
+        np.save(f"{fnames_root}_labels.{ext}", y, **save_args)
     else:
-        np.savetxt(f"{fname_data}_data.{ext}", X, **save_args)
-        np.savetxt(f"{fname_data}_labels.{ext}", y, **save_args)
+        np.savetxt(f"{fnames_root}_data.{ext}", X, **save_args)
+        np.savetxt(f"{fnames_root}_labels.{ext}", y, **save_args)
 
+def compute_centroids(X: DataArray, y: LabelArray) -> DataArray:
+    """
+    Compute the centroids of clusters in a dataset.
 
+    Assumes that labels are integers 0..k-1, where k is the number of clusters.
+
+    Parameters
+    ----------
+    X : NDArray[np.float64]
+        The data points, shape (n_samples, n_features).
+    y : NDArray[np.int_]
+        The cluster labels for each data point, shape (n_samples,).
+
+    Returns
+    -------
+    NDArray[np.float64]
+        The centroids of the clusters, shape (n_clusters, n_features).
+    """
+    unique_labels = np.unique(y)
+    centroids = np.zeros((len(unique_labels), X.shape[1]))
+    for label in unique_labels:
+        # Extract points belonging to the current cluster
+        cluster_points = X[y == label]
+        # Compute the centroid of the cluster
+        centroids[int(label)] = np.mean(cluster_points, axis=0)
+    return centroids

@@ -1,29 +1,56 @@
 import numpy as np
+from numpy.typing import NDArray
 from sklearn import datasets
 from sklearn.preprocessing import StandardScaler
 
 from .utils import save_data_labels
 
+
+DataArray = NDArray[np.float64]
+LabelArray = NDArray[np.int_]
+
 def showcase(
     path_data: str = "./datasets/sklearn_showcase",
-    N = 500,
+    N: int = 500,
     seed: int = 30,
     standardise: bool = True
-):
+) -> list[tuple[DataArray, LabelArray]]:
     """
+    Generate a small collection of synthetic clustering datasets.
+
+    The generated datasets mirror the examples used in scikit-learn's cluster
+    comparison gallery and can optionally be standardized and written to disk.
+
     Courtesy to https://scikit-learn.org/stable/auto_examples/cluster/plot_cluster_comparison.html
+
+
+    Parameters
+    ----------
+    path_data : str, default="./datasets/sklearn_showcase"
+        Output directory where each generated dataset should be saved. If an
+        empty string evaluates to ``False``, files are not written.
+    N : int, default=500
+        Number of samples to generate for each dataset.
+    seed : int, default=30
+        Seed used for NumPy's random number generator.
+    standardise : bool, default=True
+        Whether to standardize each dataset before saving and returning it.
+
+    Returns
+    -------
+    list[tuple[DataArray, LabelArray]]
+        List of ``(data, labels)`` pairs for the generated datasets, in the
+        order noisy circles, noisy moons, varied blobs, anisotropic blobs,
+        isotropic blobs, and no-structure noise.
     """
 
     np.random.seed(seed)
 
-    # ============
-    # Generate datasets. We choose the size big enough to see the scalability
-    # of the algorithms, but not too big to avoid too long running times
-    # ============
+    # Generate the datasets
     noisy_circles = datasets.make_circles(n_samples=N, factor=0.5, noise=0.05)
     noisy_moons = datasets.make_moons(n_samples=N, noise=0.05)
     blobs = datasets.make_blobs(n_samples=N, random_state=8)
-    no_structure = np.random.rand(n_samples, 2), None
+    no_structure = np.random.rand(N, 2), np.zeros(N, )
 
     # Anisotropicly distributed data
     random_state = 170
@@ -46,15 +73,24 @@ def showcase(
         ( no_structure, "no_structure", ),
     ]
 
+    res = []
+
     for dataset, name in list_datasets:
 
-        X, y = dataset
+        data, labels = dataset
 
         # normalize dataset for easier parameter selection
         if standardise:
-            X = StandardScaler().fit_transform(X)
+            data = StandardScaler().fit_transform(data)
 
-        save_data_labels(X, y, f"{path_data}/{name}")
+        if path_data:
+            save_data_labels(data, labels, f"{path_data}/{name}")
+
+        res.append((data, labels))
+
+    return res
+
+
 
 
 
