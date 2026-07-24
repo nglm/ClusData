@@ -28,7 +28,8 @@ def full_random(
     global_misclassified: float = 0.10,
     seed: int = 42
 ) -> LabelArray:
-    """Randomly replace a fraction of labels with incorrect ones.
+    """
+    Randomly mislabel a fraction of datapoints.
 
     Parameters
     ----------
@@ -74,11 +75,13 @@ def balanced(
     allow_same_closest: bool = False,
     error_if_not_enough: bool = True
 ) -> LabelArray:
-    """Misclassify each cluster toward its nearest centroid.
+    """
+    Misclassify each cluster evenly toward its nearest centroid.
 
-    The requested number of misclassified samples is distributed evenly across
-    clusters. For each cluster, the samples closest to the nearest other
-    cluster centroid are relabeled to that neighboring cluster.
+    The requested number of misclassified samples is distributed evenly
+    across clusters. For each cluster, the samples closest to the
+    nearest other cluster centroid are relabeled to that neighboring
+    cluster.
 
     Parameters
     ----------
@@ -176,11 +179,13 @@ def bully(
     y: LabelArray,
     global_misclassified: float = 0.10,
 ) -> LabelArray:
-    """Relabel points by letting dominant clusters absorb distant ones.
+    """
+    Misclassify datapoints by letting some clusters being absorbed.
 
-    Clusters are processed from the furthest centroid norm to the smallest.
-    Samples from a processed cluster are progressively reassigned to another
-    cluster until the requested global number of misclassified points is met.
+    Clusters are processed from the furthest centroid norm and then to
+    its neighbors. Samples from a processed cluster are progressively
+    reassigned to another cluster until the requested global number of
+    misclassified points is met.
 
     Parameters
     ----------
@@ -207,11 +212,20 @@ def bully(
     # Compute centroids for each cluster
     centroids = compute_centroids(X, y)
 
-    # Make the furthest away clusters be the bullied clusters
-    # (i.e the ones with thegreatest norm)
-    sorted_class = np.argsort(
-        np.linalg.norm(centroids, axis=1), descending=True
+    # Make the furthest away clusters be the first bullied cluster
+    # (i.e the one with the greatest norm)
+    first_bullied = np.argmax(np.linalg.norm(centroids, axis=1))
+
+    # ------ Find the closest cluster to the first bullied -----------
+    distances_to_first = np.linalg.norm(
+        centroids - centroids[first_bullied], axis=1
     )
+
+    # Ignore the distance to itself
+    distances_to_first[first_bullied] = np.inf
+
+    # Sort the clusters by distance to the first bullied cluster
+    sorted_class = np.argsort(distances_to_first, descending=True)
 
     # Keep track of indices to misclassify
     idx_bullied: list[int] = []
