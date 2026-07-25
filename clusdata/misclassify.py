@@ -415,3 +415,27 @@ def subclustering(
             y_wrong[i] = new_label
 
     return y_wrong
+
+def flag_misclassified(y_true: LabelArray, y_wrong: LabelArray) -> LabelArray:
+    """
+    Flag the misclassified samples between two label arrays.
+
+    Keeps all labels from the true array as is except for datapoints that were misclassified in y_wrong for which a new label `-1` is added to the returned array.,
+
+    Note that this function assumes that the labels in ``y_true`` and ``y_wrong`` are "aligned".
+
+    Parameters
+    ----------
+    y_true : NDArray[np.int_]
+        Ground-truth cluster labels encoded as integers.
+    y_wrong : NDArray[np.int_]
+        Predicted cluster labels encoded as integers.
+
+    Returns
+    -------
+    LabelArray
+        Copy of ``y_true`` except that the misclassified entries are assigned a label `-1`.
+    """
+    y_flagged = np.copy(y_true)
+    y_flagged[y_true != y_wrong] = -1
+    return y_flagged

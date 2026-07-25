@@ -4,7 +4,8 @@ import numpy as np
 from sklearn.datasets import make_blobs
 
 from clusdata.misclassify import (
-    random_within_cluster, full_random, balanced, bully, subclustering
+    random_within_cluster, full_random, balanced, bully, subclustering,
+    flag_misclassified
 )
 
 def test_random_within_cluster():
@@ -101,3 +102,14 @@ def test_subclustering():
                 assert len(np.unique(y_wrong)) == len(np.unique(y)) + len(misclassified)
             else:
                 assert len(np.unique(y_wrong)) == len(np.unique(y)) + 1
+
+def test_flag_misclassified():
+    X, y = make_blobs(n_samples=100, centers=5, n_features=2, random_state=42)
+
+    y_wrong = random_within_cluster(X, y)
+
+    # Check that the misclassified points are flagged correctly
+    y_flagged = flag_misclassified(y, y_wrong)
+    assert isinstance(y_flagged, np.ndarray)
+    assert y_flagged.shape == y.shape
+    assert np.sum(y_flagged == -1) == np.sum(y != y_wrong)
