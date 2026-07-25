@@ -6,10 +6,12 @@ different cluster validity indices, etc.
     - Number of datapoints
     - Given global percentage of misclassified
     - percentage of misclassified per cluster
-    - For the 2 version: Failed like complete random clustering
+    - For the dataset with 2 clusters: Failed like complete random clustering
 - 3 circles, with more or less distinctions between the inner ones.
   - Failed like KMeans (have 3 attractor outside the circles)
 """
+
+from typing import Union, List
 
 import numpy as np
 from numpy.typing import NDArray
@@ -21,6 +23,62 @@ from .utils import compute_centroids
 DataArray = NDArray[np.float64]
 LabelArray = NDArray[np.int_]
 
+def random_within_cluster(
+    X: DataArray,
+    y: LabelArray,
+    misclassified: Union[float, List[float]] = 0.10,
+    seed: int = 42,
+) -> LabelArray:
+    """
+    Randomly mislabel a fraction of datapoints within some clusters.
+
+    Parameters
+    ----------
+    X : NDArray[np.float64]
+        Dataset used only to infer the number of samples.
+    y : NDArray[np.int_]
+        Ground-truth cluster labels encoded as integers.
+    misclassified : Union[float, List[float]], default=0.10
+        Fraction of samples within a cluster (or a list of clusters if a
+        list is provided) whose labels should be replaced.
+    seed : int, default=42
+        Seed passed to Python's random generator for reproducibility.
+
+    Returns
+    -------
+    NDArray[np.int_]
+        Copy of ``y`` where the selected entries are assigned a label that
+        differs from their original one.
+    """
+    random.seed(seed)
+
+    if isinstance(misclassified, float):
+        misclassified = [misclassified]
+
+    N = len(X)
+    idx = list(range(N))
+    # We use set to be able to perform set operations later on
+    classes = set(np.unique(y).tolist())
+    y_wrong = np.copy(y)
+
+    for c, misclassified_c in zip(np.unique(y), misclassified):
+
+        # Indices of the current cluster
+        idx_c = [i for i in idx if y[i] == c]
+        N_c = len(idx_c)
+        # Number of samples to misclassify in this cluster
+        N_misclassified = int(N_c * misclassified_c)
+
+        # ------- Random misclassification within cluster -------
+        # Get random indices to misclassify
+        idx_misclassified = random.sample(idx_c, N_misclassified)
+
+        for i in idx_misclassified:
+            # Get a wrong label (anything but not the correct one, at random)
+            new_label = random.sample(list(classes - {y[i]}), 1)[0]
+            y_wrong[i] = new_label
+
+    return y_wrong
 
 def full_random(
     X: DataArray,
@@ -52,6 +110,7 @@ def full_random(
 
     N = len(X)
     idx = list(range(N))
+    # We use set to be able to perform set operations later on
     classes = set(np.unique(y).tolist())
     N_misclassified = int(N*global_misclassified)
 

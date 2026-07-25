@@ -3,7 +3,25 @@ import pytest
 import numpy as np
 from sklearn.datasets import make_blobs
 
-from clusdata.misclassify import full_random, balanced, bully
+from clusdata.misclassify import (
+    random_within_cluster, full_random, balanced, bully
+)
+
+def test_random_within_cluster():
+
+    X, y = make_blobs(n_samples=100, centers=5, n_features=2, random_state=42)
+
+    # Just one cluster is misclassified
+    y_wrong = random_within_cluster(X, y)
+
+    assert isinstance(y_wrong, np.ndarray)
+    assert y_wrong.shape == y.shape
+
+    # Several clusters are misclassified
+    y_wrong = random_within_cluster(X, y, misclassified=[0.1, 0.2, 0.3])
+
+    assert isinstance(y_wrong, np.ndarray)
+    assert y_wrong.shape == y.shape
 
 def test_full_random():
 
