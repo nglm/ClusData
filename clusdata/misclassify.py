@@ -336,3 +336,82 @@ def bully(
 
 
     return y_wrong
+
+def subclustering(
+    X: DataArray,
+    y: LabelArray,
+    misclassified: Union[float, List[float]] = 0.10,
+    method: str = "grouped",
+    seed: int = 42
+) -> LabelArray:
+    """
+    Misclassify datapoints by creating subclusters within some clusters.
+
+    Can create random subclusters or grouped subclusters that are close to a random point within the cluster.
+
+    Parameters
+    ----------
+    X : NDArray[np.float64]
+        Dataset of shape ``(n_samples, n_features)``.
+    y : NDArray[np.int_]
+        Ground-truth cluster labels encoded as integers.
+    misclassified : Union[float, List[float]], default=0.10
+        Fraction of samples within a cluster (or a list of clusters if a
+        list is provided) whose labels should be replaced.
+    seed : int, default=42
+        Seed passed to Python's random generator for reproducibility.
+
+    Returns
+    -------
+    NDArray[np.int_]
+        Copy of ``y`` after applying the relabeling.
+    """
+    random.seed(seed)
+
+    if isinstance(misclassified, float):
+        misclassified = [misclassified]
+
+    N = len(X)
+    idx = list(range(N))
+    # We use set to be able to perform set operations later on
+    classes = set(np.unique(y).tolist())
+    last_label = int(max(classes))
+    y_wrong = np.copy(y)
+
+    # Group the misclassified points together in a subcluster
+    for i, (c, misclassified_c) in enumerate(zip(np.unique(y), misclassified)):
+
+        # Indices of the current cluster
+        idx_c = [i for i in idx if y[i] == c]
+        N_c = len(idx_c)
+        # Number of samples to misclassify in this cluster
+        N_misclassified = int(N_c * misclassified_c)
+
+        if method == "grouped":
+
+            # Get a random point within the cluster to be the center of the subcluster
+            center_idx = random.choice(idx_c)
+            center_point = X[center_idx]
+
+            # Compute distances to the center point
+            distances_to_center = np.linalg.norm(X[idx_c] - center_point, axis=1)
+
+            # Sort indices by distance to the center point
+            idx_c_sorted = np.argsort(distances_to_center)
+
+            # Select the closest points to form the subcluster
+            idx_misclassified = [
+                idx_c[i]
+                for i in idx_c_sorted[:min(N_misclassified, N_c)]
+            ]
+        elif method == "random":
+            # Randomly select indices to misclassify
+            idx_misclassified = random.sample(idx_c, min(N_misclassified, N_c))
+
+        # Assign a new label for the subcluster
+        new_label = last_label + i + 1
+
+        for i in idx_misclassified:
+            y_wrong[i] = new_label
+
+    return y_wrong
