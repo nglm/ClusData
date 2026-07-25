@@ -15,7 +15,7 @@ import numpy as np
 from numpy.typing import NDArray
 import random
 
-from utils import compute_centroids
+from .utils import compute_centroids
 
 
 DataArray = NDArray[np.float64]
@@ -52,7 +52,7 @@ def full_random(
 
     N = len(X)
     idx = list(range(N))
-    classes = set(np.unique(y))
+    classes = set(np.unique(y).tolist())
     N_misclassified = int(N*global_misclassified)
 
     # ---------- Full random misclassification ---------------
@@ -62,7 +62,7 @@ def full_random(
     y_wrong = np.copy(y)
     for i in idx_misclassified:
          # Get a wrong label (anything but not the correct one, at random)
-        new_label = random.sample(classes - {y[i]}, 1)
+        new_label = random.sample(list(classes - {y[i]}), 1)[0]
         y_wrong[i] = new_label
 
     return y_wrong
@@ -161,7 +161,10 @@ def balanced(
                 f"{N_misclassified_c} points. Only {N_c} available."
             )
 
-        idx_misclassified_c = idx_c[idx_c_sorted[:min(N_misclassified_c, N_c)]]
+        idx_misclassified_c = [
+            idx_c[i]
+            for i in idx_c_sorted[:min(N_misclassified_c, N_c)]
+        ]
 
         # ------- Assign the wrong labels --------------
         for i in idx_misclassified_c:
@@ -222,19 +225,22 @@ def bully(
     )
 
     # Ignore the distance to itself
-    distances_to_first[first_bullied] = np.inf
+    #distances_to_first[first_bullied] = np.inf
 
     # Sort the clusters by distance to the first bullied cluster
-    sorted_class = np.argsort(distances_to_first, descending=True)
+    sorted_class = np.argsort(distances_to_first, descending=False)
 
     # Keep track of indices to misclassify
     idx_bullied: list[int] = []
+    N_bullied = 0
 
     # Bully the first cluster as much as possible, then the second, etc.
     for i, c in enumerate(sorted_class):
 
         # Current bully: next cluster in the sorted list
-        bully = idx_bullied[i+1]
+        # Normally there is no need to check whether i+1 > n_labels
+        i_bully = i+1
+        bully = sorted_class[i_bully]
 
         # --------- indices of the current cluster -------
         idx_c = [i for i in idx if y[i] == c]
@@ -246,11 +252,12 @@ def bully(
         n_newly_bullied = min(N_c, N_misclassified - N_bullied)
 
         # Find the indices of the closest datapoints to the bully
-        if n_newly_bullied <= N_c:
+        if n_newly_bullied < N_c:
             dist_to_bully = np.linalg.norm(
-                X[idx_c] - centroids[c], axis=1
+                X[idx_c] - centroids[bully], axis=1
             )
             idx_closest_to_bully = np.argsort(dist_to_bully)[:n_newly_bullied]
+            idx_closest_to_bully = idx_closest_to_bully.tolist()
         # Otherwise, take them all
         else:
             idx_closest_to_bully = idx_c.copy()
