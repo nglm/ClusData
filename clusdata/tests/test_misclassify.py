@@ -5,34 +5,41 @@ from sklearn.datasets import make_blobs
 import matplotlib.pyplot as plt
 
 from clusdata.misclassify import (
-    random_within_cluster, full_random, balanced, bully, subclustering,
-    flag_misclassified, plot_misclassified
+    full_random, balanced, bully, subclustering,
+    flag_misclassified, plot_misclassified, set_misclassified,
 )
 
-def test_random_within_cluster():
-
+def test_set_misclassified():
     X, y = make_blobs(n_samples=100, centers=5, n_features=2, random_state=42)
 
-    # Just one cluster is misclassified
-    y_wrong = random_within_cluster(X, y)
+    for r in [0.1, [0.1, 0.2], [0.1, 0.2, 0.3, 0.4, 0.5]]:
+        for apply in [True, False]:
+            new_r = set_misclassified(
+                misclassified=r, y=y, apply_misclassification_to_all_clusters=apply
+            )
 
-    assert isinstance(y_wrong, np.ndarray)
-    assert y_wrong.shape == y.shape
+            assert isinstance(new_r, list)
+            assert len(new_r) == 5
+            assert all(isinstance(x, float) for x in new_r)
 
-    # Several clusters are misclassified
-    y_wrong = random_within_cluster(X, y, misclassified=[0.1, 0.2, 0.3])
 
-    assert isinstance(y_wrong, np.ndarray)
-    assert y_wrong.shape == y.shape
+
 
 def test_full_random():
 
     X, y = make_blobs(n_samples=100, centers=5, n_features=2, random_state=42)
 
-    y_wrong = full_random(X, y)
+    for r in [0.1, [0.1, 0.2, 0.3], [0.1, 0.2, 0.3, 0.4, 0.5]]:
+        for apply in [True, False]:
+            for is_global in [True, False]:
+                y_wrong = full_random(
+                    X, y, misclassified=r, apply_misclassification_to_all_clusters=apply,
+                    global_misclassification=is_global
+                )
 
-    assert isinstance(y_wrong, np.ndarray)
-    assert y_wrong.shape == y.shape
+                assert isinstance(y_wrong, np.ndarray)
+                assert y_wrong.shape == y.shape
+
 
 def test_balanced():
 
@@ -111,7 +118,7 @@ def test_subclustering():
 def test_flag_misclassified():
     X, y = make_blobs(n_samples=100, centers=5, n_features=2, random_state=42)
 
-    y_wrong = random_within_cluster(X, y)
+    y_wrong = full_random(X, y)
 
     # Check that the misclassified points are flagged correctly
     y_flagged = flag_misclassified(y, y_wrong)
@@ -122,7 +129,7 @@ def test_flag_misclassified():
 def test_plot_misclassified():
     X, y = make_blobs(n_samples=100, centers=5, n_features=2, random_state=42)
 
-    y_wrong = random_within_cluster(X, y)
+    y_wrong = full_random(X, y)
 
     # Check when no fig and ax are provided
     fig, ax = plot_misclassified(X, y, y_wrong)

@@ -25,11 +25,85 @@ from .utils import compute_centroids
 DataArray = NDArray[np.float64]
 LabelArray = NDArray[np.int_]
 
-def random_within_cluster(
+def set_misclassified(
+    misclassified: Union[float, List[float]],
+    y: LabelArray,
+    apply_misclassification_to_all_clusters: bool = True,
+) -> List[int]:
+    """
+    Set the number of misclassified samples per cluster.
+
+    Parameters
+    ----------
+    misclassified : Union[float, List[float]]
+        Fraction of samples within a cluster (or a list of clusters if a
+        list is provided) whose labels should be replaced. If a list is provided, the length of the list must be less than or equal to the number of clusters in ``y``. If fewer values are provided than the number of clusters, the remaining clusters will have a misclassification rate of 0.
+    y : NDArray[np.int_]
+        Ground-truth cluster labels encoded as integers.
+    apply_misclassification_to_all_clusters : bool, default=True
+        If ``True`` and if ``misclassified`` is a float, then applies
+        the same misclassification rate to all clusters. If ``False``,
+        only applies the misclassification strategy to the first
+        (smallest label) cluster.
+
+    Returns
+    -------
+    List[int]
+        List of misclassified fractions for each cluster.
+
+    Raises
+    ------
+    ValueError
+        If the length of the misclassified list is greater than the
+        number of clusters in ``y`` or if any value in the list is not
+        between 0 and 1.
+    TypeError
+        If ``misclassified`` is not a float or a list of floats.
+    """
+
+    N_clusters = len(np.unique(y))
+
+    if isinstance(misclassified, float):
+        # All clusters get the same rate
+        if apply_misclassification_to_all_clusters:
+            misclassified = [misclassified] * N_clusters
+        # Only the first cluster get a non null misclassification rate
+        else:
+            misclassified = [misclassified] + [0.]*(N_clusters-1)
+    elif isinstance(misclassified, list):
+
+        # Raise error if more rates than clusters
+        if len(misclassified) > N_clusters:
+            raise ValueError(
+                f"Length of misclassified list ({len(misclassified)}) "
+                f"greater than the number of clusters ({N_clusters})."
+            )
+
+        # Complete with zeros if needed
+        elif len(misclassified) < N_clusters:
+            misclassified += [0.] * (N_clusters - len(misclassified))
+
+    # Raise error if wrong type
+    else:
+        raise TypeError(
+            f"misclassified must be a float or a list of floats, "
+            f"got {type(misclassified)}."
+        )
+    if any([r < 0 or r > 1 for r in misclassified]):
+        raise ValueError(
+            f"All values in misclassified list must be between 0 and 1. "
+            f"Got {misclassified}."
+        )
+    return misclassified
+
+
+def full_random(
     X: DataArray,
     y: LabelArray,
     misclassified: Union[float, List[float]] = 0.10,
     seed: int = 42,
+    apply_misclassification_to_all_clusters: bool = True,
+    global_misclassification: bool = False,
 ) -> LabelArray:
     """
     Randomly mislabel a fraction of datapoints within some clusters.
@@ -40,11 +114,23 @@ def random_within_cluster(
         Dataset used only to infer the number of samples.
     y : NDArray[np.int_]
         Ground-truth cluster labels encoded as integers.
-    misclassified : Union[float, List[float]], default=0.10
+    misclassified : Union[float, List[float]]
         Fraction of samples within a cluster (or a list of clusters if a
-        list is provided) whose labels should be replaced.
+        list is provided) whose labels should be replaced. If a list is provided, the length of the list must be less than or equal to the number of clusters in ``y``. If fewer values are provided than the number of clusters, the remaining clusters will have a misclassification rate of 0.
     seed : int, default=42
         Seed passed to Python's random generator for reproducibility.
+    apply_misclassification_to_all_clusters : bool, default=True
+        If ``True`` and if ``misclassified`` is a float, then applies
+        the same misclassification rate to all clusters. If ``False``,
+        only applies the misclassification strategy to the first
+        (smallest label) cluster.
+    global_misclassification : bool, default=False
+        If ``True`` and if ``misclassified`` was a float, randomly
+        re-assign labels independently of the cluster. The result will
+        be very similar to applying the same misclassification rate to
+        all clusters, except that there will be small variations in the
+        precise number of misclassified datapoint within each cluster.
+        This parameter is ignored if ``misclassified`` is not a float.
 
     Returns
     -------
@@ -54,79 +140,53 @@ def random_within_cluster(
     """
     random.seed(seed)
 
-    if isinstance(misclassified, float):
-        misclassified = [misclassified]
-
     N = len(X)
     idx = list(range(N))
-    # We use set to be able to perform set operations later on
-    classes = set(np.unique(y).tolist())
+    classes = sorted(np.unique(y).tolist())
     y_wrong = np.copy(y)
 
-    for c, misclassified_c in zip(np.unique(y), misclassified):
+     # ---------- Full random misclassification ---------------
+    if isinstance(misclassified, float) and global_misclassification:
 
-        # Indices of the current cluster
-        idx_c = [i for i in idx if y[i] == c]
-        N_c = len(idx_c)
         # Number of samples to misclassify in this cluster
-        N_misclassified = int(N_c * misclassified_c)
+        N_misclassified = int(N * misclassified)
 
-        # ------- Random misclassification within cluster -------
         # Get random indices to misclassify
-        idx_misclassified = random.sample(idx_c, N_misclassified)
+        idx_misclassified = random.sample(idx, N_misclassified)
 
+        y_wrong = np.copy(y)
         for i in idx_misclassified:
             # Get a wrong label (anything but not the correct one, at random)
-            new_label = random.sample(list(classes - {y[i]}), 1)[0]
+            new_label = random.sample(list(set(classes) - {y[i]}), 1)[0]
             y_wrong[i] = new_label
 
-    return y_wrong
+    # --------- Random misclassification within clusters ---------------
+    else:
 
-def full_random(
-    X: DataArray,
-    y: LabelArray,
-    misclassified: float = 0.10,
-    seed: int = 42
-) -> LabelArray:
-    """
-    Randomly mislabel a fraction of datapoints.
+        misclassified = set_misclassified(
+            misclassified=misclassified, y=y,
+            apply_misclassification_to_all_clusters=apply_misclassification_to_all_clusters
+        )
 
-    Parameters
-    ----------
-    X : NDArray[np.float64]
-        Dataset used only to infer the number of samples.
-    y : NDArray[np.int_]
-        Ground-truth cluster labels encoded as integers.
-    misclassified : float, default=0.10
-        Fraction of samples whose labels should be replaced.
-    seed : int, default=42
-        Seed passed to Python's random generator for reproducibility.
+        for c, misclassified_c in zip(classes, misclassified):
 
-    Returns
-    -------
-    NDArray[np.int_]
-        Copy of ``y`` where the selected entries are assigned a label that
-        differs from their original one.
-    """
-    random.seed(seed)
+            # Indices of the current cluster
+            idx_c = [i for i in idx if y[i] == c]
+            N_c = len(idx_c)
+            # Number of samples to misclassify in this cluster
+            N_misclassified = int(N_c * misclassified_c)
 
-    N = len(X)
-    idx = list(range(N))
-    # We use set to be able to perform set operations later on
-    classes = set(np.unique(y).tolist())
-    N_misclassified = int(N*misclassified)
+            # ------- Random misclassification within cluster -------
+            # Get random indices to misclassify
+            idx_misclassified = random.sample(idx_c, N_misclassified)
 
-    # ---------- Full random misclassification ---------------
-    # Get random indices to misclassify
-    idx_misclassified = random.sample(idx, N_misclassified)
-
-    y_wrong = np.copy(y)
-    for i in idx_misclassified:
-         # Get a wrong label (anything but not the correct one, at random)
-        new_label = random.sample(list(classes - {y[i]}), 1)[0]
-        y_wrong[i] = new_label
+            for i in idx_misclassified:
+                # Get new label (anything but not the correct one, at random)
+                new_label = random.sample(list(set(classes) - {y[i]}), 1)[0]
+                y_wrong[i] = new_label
 
     return y_wrong
+
 
 def balanced(
     X: DataArray,
@@ -134,7 +194,8 @@ def balanced(
     misclassified: float = 0.10,
     seed: int = 42,
     allow_same_closest: bool = False,
-    error_if_not_enough: bool = True
+    error_if_not_enough: bool = True,
+    apply_misclassification_to_all_clusters: bool = True,
 ) -> LabelArray:
     """
     Misclassify each cluster evenly toward its nearest centroid.
@@ -150,8 +211,9 @@ def balanced(
         Dataset of shape ``(n_samples, n_features)``.
     y : NDArray[np.int_]
         Ground-truth cluster labels encoded as integers.
-    misclassified : float, default=0.10
-        Fraction of samples to relabel across the whole dataset.
+    misclassified : Union[float, List[float]]
+        Fraction of samples within a cluster (or a list of clusters if a
+        list is provided) whose labels should be replaced. If a list is provided, the length of the list must be less than or equal to the number of clusters in ``y``. If fewer values are provided than the number of clusters, the remaining clusters will have a misclassification rate of 0.
     seed : int, default=42
         Seed passed to Python's random generator for reproducibility.
     allow_same_closest : bool, default=False
@@ -159,6 +221,11 @@ def balanced(
     error_if_not_enough : bool, default=True
         Whether to raise when a cluster contains fewer points than the number
         requested for relabeling from that cluster.
+    apply_misclassification_to_all_clusters : bool, default=True
+        If ``True`` and if ``misclassified`` is a float, then applies
+        the same misclassification rate to all clusters. If ``False``,
+        only applies the misclassification strategy to the first
+        (smallest label) cluster.
 
     Returns
     -------
@@ -177,9 +244,12 @@ def balanced(
 
     N = len(X)
     idx = list(range(N))
-    classes = set(np.unique(y))
-    N_misclassified = int(N*misclassified)
-    N_misclassified_c = int(N_misclassified/len(classes))
+    classes = sorted(np.unique(y).tolist())
+
+    misclassified = set_misclassified(
+        misclassified=misclassified, y=y,
+        apply_misclassification_to_all_clusters=apply_misclassification_to_all_clusters
+    )
 
     y_wrong = np.copy(y)
 
@@ -189,11 +259,12 @@ def balanced(
     # Compute centroids for each cluster
     centroids = compute_centroids(X, y)
 
-    for c in classes:
+    for c, misclassified_c in zip(classes, misclassified):
 
         # --------- indices of the current cluster -------
         idx_c = [i for i in idx if y[i] == c]
         N_c = len(idx_c)
+        N_misclassified_c = int(N_c * misclassified_c)
 
         # ------ Find the closest cluster to c -----------
         distances = np.linalg.norm(centroids - centroids[c], axis=1)
@@ -242,7 +313,7 @@ def bully(
     X: DataArray,
     y: LabelArray,
     misclassified: float = 0.10,
-    error_if_not_enough: bool = True
+    error_if_not_enough: bool = True,
 ) -> LabelArray:
     """
     Misclassify datapoints by letting some clusters being absorbed.
@@ -260,6 +331,8 @@ def bully(
         Ground-truth cluster labels encoded as integers.
     misclassified : float, default=0.10
         Fraction of samples to relabel across the whole dataset.
+    error_if_not_enough : bool, default=True
+        Whether to raise a ValueError if there are not enough points in a cluster to satisfy the requested misclassification count.
 
     Returns
     -------
@@ -293,9 +366,6 @@ def bully(
     distances_to_first = np.linalg.norm(
         centroids - centroids[first_bullied], axis=1
     )
-
-    # Ignore the distance to itself
-    #distances_to_first[first_bullied] = np.inf
 
     # Sort the clusters by distance to the first bullied cluster
     # descending order appeared in numpy > 2.5
@@ -378,6 +448,7 @@ def subclustering(
     method: str = "grouped",
     seed: int = 42,
     misclassify_minority: bool = False,
+    apply_misclassification_to_all_clusters: bool = True
 ) -> LabelArray:
     """
     Misclassify datapoints by creating subclusters within some clusters.
@@ -402,11 +473,20 @@ def subclustering(
         Dataset of shape ``(n_samples, n_features)``.
     y : NDArray[np.int_]
         Ground-truth cluster labels encoded as integers.
-    misclassified : Union[float, List[float]], default=0.10
+    misclassified : Union[float, List[float]]
         Fraction of samples within a cluster (or a list of clusters if a
-        list is provided) whose labels should be replaced.
+        list is provided) whose labels should be replaced. If a list is provided, the length of the list must be less than or equal to the number of clusters in ``y``. If fewer values are provided than the number of clusters, the remaining clusters will have a misclassification rate of 0.
+    method : str, default="grouped"
+        Method to use for creating subclusters. Can be either "grouped" or "random". If "grouped", the misclassified samples will be grouped together in a subcluster that is close to a random point within the cluster. If "random", the misclassified samples will be randomly selected within the cluster.
     seed : int, default=42
         Seed passed to Python's random generator for reproducibility.
+    misclassify_minority : bool, default=False
+        Whether to misclassify the minority of the subcluster instead of the majority.
+    apply_misclassification_to_all_clusters : bool, default=True
+        If ``True`` and if ``misclassified`` is a float, then applies
+        the same misclassification rate to all clusters. If ``False``,
+        only applies the misclassification strategy to the first
+        (smallest label) cluster.
 
     Returns
     -------
@@ -415,24 +495,26 @@ def subclustering(
     """
     random.seed(seed)
 
-    if isinstance(misclassified, float):
-        misclassified = [misclassified]
+    misclassified = set_misclassified(
+        misclassified=misclassified, y=y,
+        apply_misclassification_to_all_clusters=apply_misclassification_to_all_clusters
+    )
 
     N = len(X)
     idx = list(range(N))
     # We use set to be able to perform set operations later on
-    classes = set(np.unique(y).tolist())
+    classes = sorted(np.unique(y).tolist())
     last_label = int(max(classes))
     y_wrong = np.copy(y)
 
     # Group the misclassified points together in a subcluster
-    for i, (c, misclassified_c) in enumerate(zip(np.unique(y), misclassified)):
+    for i, (c, misclassified_c) in enumerate(zip(classes, misclassified)):
 
         # Indices of the current cluster
         idx_c = [i for i in idx if y[i] == c]
         N_c = len(idx_c)
         # Number of samples to misclassify in this cluster
-        N_misclassified = int(N_c * misclassified_c)
+        N_misclassified_c = int(N_c * misclassified_c)
 
         if method == "grouped":
 
@@ -449,11 +531,11 @@ def subclustering(
             # Select the closest points to form the subcluster
             idx_misclassified = [
                 idx_c[i]
-                for i in idx_c_sorted[:min(N_misclassified, N_c)]
+                for i in idx_c_sorted[:min(N_misclassified_c, N_c)]
             ]
         elif method == "random":
             # Randomly select indices to misclassify
-            idx_misclassified = random.sample(idx_c, min(N_misclassified, N_c))
+            idx_misclassified = random.sample(idx_c, min(N_misclassified_c, N_c))
 
         # Assign a new label for the subcluster
         new_label = last_label + i + 1
@@ -467,7 +549,10 @@ def subclustering(
 
     return y_wrong
 
-def flag_misclassified(y_true: LabelArray, y_wrong: LabelArray) -> LabelArray:
+def flag_misclassified(
+        y_true: LabelArray,
+        y_wrong: LabelArray
+    ) -> LabelArray:
     """
     Flag the misclassified samples between two label arrays.
 
