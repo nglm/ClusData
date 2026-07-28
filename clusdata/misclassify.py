@@ -85,7 +85,7 @@ def random_within_cluster(
 def full_random(
     X: DataArray,
     y: LabelArray,
-    global_misclassified: float = 0.10,
+    misclassified: float = 0.10,
     seed: int = 42
 ) -> LabelArray:
     """
@@ -97,7 +97,7 @@ def full_random(
         Dataset used only to infer the number of samples.
     y : NDArray[np.int_]
         Ground-truth cluster labels encoded as integers.
-    global_misclassified : float, default=0.10
+    misclassified : float, default=0.10
         Fraction of samples whose labels should be replaced.
     seed : int, default=42
         Seed passed to Python's random generator for reproducibility.
@@ -114,7 +114,7 @@ def full_random(
     idx = list(range(N))
     # We use set to be able to perform set operations later on
     classes = set(np.unique(y).tolist())
-    N_misclassified = int(N*global_misclassified)
+    N_misclassified = int(N*misclassified)
 
     # ---------- Full random misclassification ---------------
     # Get random indices to misclassify
@@ -131,7 +131,7 @@ def full_random(
 def balanced(
     X: DataArray,
     y: LabelArray,
-    global_misclassified: float = 0.10,
+    misclassified: float = 0.10,
     seed: int = 42,
     allow_same_closest: bool = False,
     error_if_not_enough: bool = True
@@ -150,7 +150,7 @@ def balanced(
         Dataset of shape ``(n_samples, n_features)``.
     y : NDArray[np.int_]
         Ground-truth cluster labels encoded as integers.
-    global_misclassified : float, default=0.10
+    misclassified : float, default=0.10
         Fraction of samples to relabel across the whole dataset.
     seed : int, default=42
         Seed passed to Python's random generator for reproducibility.
@@ -178,7 +178,7 @@ def balanced(
     N = len(X)
     idx = list(range(N))
     classes = set(np.unique(y))
-    N_misclassified = int(N*global_misclassified)
+    N_misclassified = int(N*misclassified)
     N_misclassified_c = int(N_misclassified/len(classes))
 
     y_wrong = np.copy(y)
@@ -241,7 +241,7 @@ def balanced(
 def bully(
     X: DataArray,
     y: LabelArray,
-    global_misclassified: float = 0.10,
+    misclassified: float = 0.10,
     error_if_not_enough: bool = True
 ) -> LabelArray:
     """
@@ -258,7 +258,7 @@ def bully(
         Dataset of shape ``(n_samples, n_features)``.
     y : NDArray[np.int_]
         Ground-truth cluster labels encoded as integers.
-    global_misclassified : float, default=0.10
+    misclassified : float, default=0.10
         Fraction of samples to relabel across the whole dataset.
 
     Returns
@@ -277,7 +277,7 @@ def bully(
 
     N = len(X)
     idx = list(range(N))
-    N_misclassified = int(N*global_misclassified)
+    N_misclassified = int(N*misclassified)
 
     y_wrong = np.copy(y)
 
@@ -475,6 +475,8 @@ def flag_misclassified(y_true: LabelArray, y_wrong: LabelArray) -> LabelArray:
 
     Note that this function assumes that the labels in ``y_true`` and ``y_wrong`` are "aligned".
 
+    Note that ``y_true`` and ``y_wrong`` can have different number of clusters, but the labels must be aligned for the correctly classified samples.
+
     Parameters
     ----------
     y_true : NDArray[np.int_]
@@ -504,6 +506,8 @@ def plot_misclassified(
     Plot the misclassified samples between two label arrays.
 
     Note that this function assumes that the labels in ``y_true`` and ``y_wrong`` are "aligned".
+
+    Note that ``y_true`` and ``y_wrong`` can have different number of clusters, but the labels must be aligned for the correctly classified samples.
 
     Parameters
     ----------

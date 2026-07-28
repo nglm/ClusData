@@ -57,10 +57,10 @@ def test_balanced():
 
     with pytest.raises(ValueError):
         y_wrong = balanced(
-            X, y_error, global_misclassified=0.8, error_if_not_enough=True
+            X, y_error, misclassified=0.8, error_if_not_enough=True
         )
     y_wrong = balanced(
-        X, y_error, global_misclassified=0.8, error_if_not_enough=False
+        X, y_error, misclassified=0.8, error_if_not_enough=False
     )
 
 def test_bully():
@@ -77,7 +77,7 @@ def test_bully():
     assert len(np.unique(y_wrong)) == 5
 
 
-    y_wrong = bully(X, y, global_misclassified=0.5)
+    y_wrong = bully(X, y, misclassified=0.5)
 
     # Two clusters are fully eaten, and one is half eaten
     assert isinstance(y_wrong, np.ndarray)
