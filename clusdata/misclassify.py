@@ -365,7 +365,6 @@ def bully(
             # Stop
             break
 
-
     return y_wrong
 
 def subclustering(
