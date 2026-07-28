@@ -344,8 +344,12 @@ def bully(
                 dist_to_bully = np.linalg.norm(
                     X[idx_c] - centroids[bully], axis=1
                 )
-                idx_closest_to_bully = np.argsort(dist_to_bully)[:n_newly_bullied]
-                idx_closest_to_bully = idx_closest_to_bully.tolist()
+                # Find in idx_c the indices of the closest points to the bully
+                idx_closest_to_bully = np.argsort(dist_to_bully)
+                # Find them in idx and keep only the first ones
+                idx_closest_to_bully = [
+                    idx_c[i] for i in idx_closest_to_bully[:n_newly_bullied]
+                ]
             # Otherwise, take them all
             else:
                 idx_closest_to_bully = idx_c.copy()
