@@ -92,17 +92,21 @@ def test_subclustering():
 
     for method in ["grouped", "random"]:
         for misclassified in [0.1, [0.1, 0.2, 0.3]]:
-            y_wrong = subclustering(X, y, method=method, misclassified=misclassified)
+            for misclassify_minority in [True, False]:
+                y_wrong = subclustering(
+                    X, y, method=method, misclassified=misclassified,
+                    misclassify_minority=misclassify_minority
+                )
 
-            assert isinstance(y_wrong, np.ndarray)
-            assert y_wrong.shape == y.shape
-            assert len(np.unique(y_wrong)) > len(np.unique(y))
+                assert isinstance(y_wrong, np.ndarray)
+                assert y_wrong.shape == y.shape
+                assert len(np.unique(y_wrong)) > len(np.unique(y))
 
-            # Check the new number of clusters
-            if isinstance(misclassified, list):
-                assert len(np.unique(y_wrong)) == len(np.unique(y)) + len(misclassified)
-            else:
-                assert len(np.unique(y_wrong)) == len(np.unique(y)) + 1
+                # Check the new number of clusters
+                if isinstance(misclassified, list):
+                    assert len(np.unique(y_wrong)) == len(np.unique(y)) + len(misclassified)
+                else:
+                    assert len(np.unique(y_wrong)) == len(np.unique(y)) + 1
 
 def test_flag_misclassified():
     X, y = make_blobs(n_samples=100, centers=5, n_features=2, random_state=42)

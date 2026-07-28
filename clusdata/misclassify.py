@@ -376,12 +376,25 @@ def subclustering(
     y: LabelArray,
     misclassified: Union[float, List[float]] = 0.10,
     method: str = "grouped",
-    seed: int = 42
+    seed: int = 42,
+    misclassify_minority: bool = False,
 ) -> LabelArray:
     """
     Misclassify datapoints by creating subclusters within some clusters.
 
-    Can create random subclusters or grouped subclusters that are close to a random point within the cluster.
+    Can create random subclusters or grouped subclusters that are close
+    to a random point within the cluster.
+
+    Note that this function a priori keeps the clusters aligned, meaning
+    that the labels in ``y`` and ``y_wrong`` will be the same for the
+    correctly classified samples.
+
+    If ``misclassify_minority`` is set to ``True``, then the minority of
+    the subcluster will be misclassified instead of the majority. More
+    specifically, if a subcluster within a cluster becomes the majority
+    then the new label of the subcluster will be the same as the
+    original cluster label and the minority will be the misclassified
+    samples.
 
     Parameters
     ----------
@@ -445,6 +458,10 @@ def subclustering(
         # Assign a new label for the subcluster
         new_label = last_label + i + 1
 
+        # Case where the subcluster becomes the majority
+        if misclassify_minority and len(idx_misclassified) > N_c / 2:
+            idx_misclassified = [i for i in idx_c if i not in idx_misclassified]
+
         for i in idx_misclassified:
             y_wrong[i] = new_label
 
@@ -485,6 +502,8 @@ def plot_misclassified(
 ):
     """
     Plot the misclassified samples between two label arrays.
+
+    Note that this function assumes that the labels in ``y_true`` and ``y_wrong`` are "aligned".
 
     Parameters
     ----------
