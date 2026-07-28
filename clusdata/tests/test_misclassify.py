@@ -112,6 +112,8 @@ def test_subclustering():
                         assert len(np.unique(y_wrong)) == len(np.unique(y)) + len(misclassified)
                     elif isinstance(misclassified, float) and not apply_misclassification_to_all_clusters:
                         assert len(np.unique(y_wrong)) == len(np.unique(y)) + 1
+                    elif isinstance(misclassified, float) and apply_misclassification_to_all_clusters:
+                        assert len(np.unique(y_wrong)) == 2*len(np.unique(y))
 
 def test_flag_misclassified():
     X, y = make_blobs(n_samples=100, centers=5, n_features=2, random_state=42)

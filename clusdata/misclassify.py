@@ -357,11 +357,7 @@ def bully(
     )
 
     # Sort the clusters by distance to the first bullied cluster
-    # descending order appeared in numpy > 2.5
-    if np.__version__ >= "2.5":
-        sorted_class = np.argsort(distances_to_first, descending=False)
-    else:
-        sorted_class = np.argsort(distances_to_first)[::-1]
+    sorted_class = np.argsort(distances_to_first)
 
     # Keep track of indices to misclassify
     idx_bullied: list[int] = []
@@ -497,7 +493,11 @@ def subclustering(
     y_wrong = np.copy(y)
 
     # Group the misclassified points together in a subcluster
-    for i, (c, misclassified_c) in enumerate(zip(classes, misclassified)):
+    for c, misclassified_c in zip(classes, misclassified):
+
+        # Ignore this step if no misclassification is requested for this cluster
+        if misclassified_c == 0:
+            continue
 
         # Indices of the current cluster
         idx_c = [i for i in idx if y[i] == c]
@@ -526,15 +526,13 @@ def subclustering(
             # Randomly select indices to misclassify
             idx_misclassified = random.sample(idx_c, min(N_misclassified_c, N_c))
 
-        # Assign a new label for the subcluster
-        new_label = last_label + i + 1
-
         # Case where the subcluster becomes the majority
         if misclassify_minority and len(idx_misclassified) > N_c / 2:
             idx_misclassified = [i for i in idx_c if i not in idx_misclassified]
 
+        last_label = last_label + 1
         for i in idx_misclassified:
-            y_wrong[i] = new_label
+            y_wrong[i] = last_label
 
     return y_wrong
 
