@@ -242,6 +242,7 @@ def bully(
     X: DataArray,
     y: LabelArray,
     global_misclassified: float = 0.10,
+    error_if_not_enough: bool = True
 ) -> LabelArray:
     """
     Misclassify datapoints by letting some clusters being absorbed.
@@ -264,6 +265,14 @@ def bully(
     -------
     NDArray[np.int_]
         Copy of ``y`` after applying the bully-style relabeling.
+
+    Raises
+    ------
+    ValueError
+        If the total number of datapoints minus the number of datapoints
+        in the last bully cluster is smaller than the number of samples
+        needed to satisfy the requested misclassification count and
+        ``error_if_not_enough`` is ``True``.
     """
 
     N = len(X)
@@ -302,33 +311,49 @@ def bully(
     # Bully the first cluster as much as possible, then the second, etc.
     for i, c in enumerate(sorted_class):
 
-        # Current bully: next cluster in the sorted list
-        # Normally there is no need to check whether i+1 > n_labels
-        i_bully = i+1
-        bully = sorted_class[i_bully]
-
         # --------- indices of the current cluster -------
         idx_c = [i for i in idx if y[i] == c]
         N_c = len(idx_c)
 
-        # ------ Find datapoints to bully  -----------
-        # Bully as many points as possible from this cluster,
-        # but not more than the number of points left to misclassify
-        n_newly_bullied = min(N_c, N_misclassified - N_bullied)
-
-        # Find the indices of the closest datapoints to the bully
-        if n_newly_bullied < N_c:
-            dist_to_bully = np.linalg.norm(
-                X[idx_c] - centroids[bully], axis=1
-            )
-            idx_closest_to_bully = np.argsort(dist_to_bully)[:n_newly_bullied]
-            idx_closest_to_bully = idx_closest_to_bully.tolist()
-        # Otherwise, take them all
+        # Current bully: next cluster in the sorted list
+        # If we reached the last bully and still want more misclassified
+        # points than N- N_bully, then i+1 will yield an error. This
+        # case means that we only have one cluster in the dataset, and
+        # we might raise an error if error_if_not_enough is True
+        i_bully = i+1
+        if i+1 == len(sorted_class):
+            if error_if_not_enough:
+                raise ValueError(
+                    f"Not enough points to misclassify {N_misclassified} points. "
+                    f"Only {N - N_bullied} available."
+                )
+            else:
+                bully = c
+                idx_bullied += idx_c
+        # Regular case, where we have a next cluster to bully
         else:
-            idx_closest_to_bully = idx_c.copy()
+            bully = sorted_class[i_bully]
 
-        # Update the list of bullied indices
-        idx_bullied += idx_closest_to_bully
+            # ------ Find datapoints to bully  -----------
+            # Bully as many points as possible from this cluster,
+            # but not more than the number of points left to misclassify
+            n_newly_bullied = min(N_c, N_misclassified - N_bullied)
+
+            # Find the indices of the closest datapoints to the bully
+            if n_newly_bullied < N_c:
+                dist_to_bully = np.linalg.norm(
+                    X[idx_c] - centroids[bully], axis=1
+                )
+                idx_closest_to_bully = np.argsort(dist_to_bully)[:n_newly_bullied]
+                idx_closest_to_bully = idx_closest_to_bully.tolist()
+            # Otherwise, take them all
+            else:
+                idx_closest_to_bully = idx_c.copy()
+
+            # Update the list of bullied indices
+            idx_bullied += idx_closest_to_bully
+
+        # Update labels if we are done
         N_bullied = len(idx_bullied)
 
         # Check whether we have enough points to misclassify
