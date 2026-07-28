@@ -289,7 +289,11 @@ def bully(
     #distances_to_first[first_bullied] = np.inf
 
     # Sort the clusters by distance to the first bullied cluster
-    sorted_class = np.argsort(distances_to_first, descending=False)
+    # descending order appeared in numpy > 2.5
+    if np.__version__ >= "2.5":
+        sorted_class = np.argsort(distances_to_first, descending=False)
+    else:
+        sorted_class = np.argsort(distances_to_first)[::-1]
 
     # Keep track of indices to misclassify
     idx_bullied: list[int] = []
