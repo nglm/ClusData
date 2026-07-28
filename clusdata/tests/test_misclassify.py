@@ -2,10 +2,11 @@ import pytest
 
 import numpy as np
 from sklearn.datasets import make_blobs
+import matplotlib.pyplot as plt
 
 from clusdata.misclassify import (
     random_within_cluster, full_random, balanced, bully, subclustering,
-    flag_misclassified
+    flag_misclassified, plot_misclassified
 )
 
 def test_random_within_cluster():
@@ -113,3 +114,38 @@ def test_flag_misclassified():
     assert isinstance(y_flagged, np.ndarray)
     assert y_flagged.shape == y.shape
     assert np.sum(y_flagged == -1) == np.sum(y != y_wrong)
+
+def test_plot_misclassified():
+    X, y = make_blobs(n_samples=100, centers=5, n_features=2, random_state=42)
+
+    y_wrong = random_within_cluster(X, y)
+
+    # Check when no fig and ax are provided
+    fig, ax = plot_misclassified(X, y, y_wrong)
+    assert fig is not None
+    assert ax is not None
+
+    # Check when fig and ax are provided with a fig having multiple subplots
+    list_X = [X]*3
+    list_y = [y]*3
+    list_y_wrong = [y_wrong]*3
+    n_plots = len(list_X)
+    # Share y-axis and y-label across all subplots
+    fig, axs = plt.subplots(1, n_plots, figsize=(5*n_plots,5), sharey=True)
+    correct_in_grey = True
+
+    for i in range(n_plots):
+        X = list_X[i]
+        y = list_y[i]
+        y_wrong = list_y_wrong[i]
+
+        fig, axs[i] = plot_misclassified(
+            X, y, y_wrong, correct_in_grey=correct_in_grey,
+            fig=fig, ax=axs[i], scatter_kwargs={"alpha": 0.1}
+        )
+        correct_in_grey = not correct_in_grey
+
+        axs[i].set_xlabel("")
+
+
+    axs[0].set_ylabel("Feature 2")

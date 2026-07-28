@@ -16,6 +16,8 @@ from typing import Union, List
 import numpy as np
 from numpy.typing import NDArray
 import random
+import matplotlib
+from matplotlib import pyplot as plt
 
 from .utils import compute_centroids
 
@@ -439,3 +441,87 @@ def flag_misclassified(y_true: LabelArray, y_wrong: LabelArray) -> LabelArray:
     y_flagged = np.copy(y_true)
     y_flagged[y_true != y_wrong] = -1
     return y_flagged
+
+def plot_misclassified(
+    X: DataArray,
+    y_true: LabelArray,
+    y_wrong: LabelArray,
+    correct_in_grey: bool = True,
+    fig: matplotlib.figure.Figure = None,
+    ax: matplotlib.axes.Axes = None,
+    scatter_kwargs: dict = {"alpha": 0.3}
+):
+    """
+    Plot the misclassified samples between two label arrays.
+
+    Parameters
+    ----------
+    X : NDArray[np.float64]
+        Dataset of shape ``(n_samples, n_features)``.
+    y_true : NDArray[np.int_]
+        Ground-truth cluster labels encoded as integers.
+    y_wrong : NDArray[np.int_]
+        Predicted cluster labels encoded as integers.
+    correct_in_grey : bool, default=True
+        Whether to plot the correctly classified samples in grey or not.
+    fig : matplotlib.figure.Figure, optional
+        Matplotlib figure object. If not provided, a new figure will be created.
+    ax : matplotlib.axes.Axes, optional
+        Matplotlib axes object. If not provided, a new axes will be created.
+    scatter_kwargs : dict, optional
+        Additional keyword arguments to pass to the scatter plot function.
+
+    Returns
+    -------
+    fig, axs
+        Matplotlib figure and axes objects.
+    """
+    if fig is None or ax is None:
+        fig, ax = plt.subplots(1, 1, figsize=(5, 5))
+
+    y_flagged = flag_misclassified(y_true, y_wrong)
+    unique_clusters = np.unique(y_flagged)
+
+    if not correct_in_grey:
+        color_map = {
+            cluster: plt.cm.tab20(i)
+            for i, cluster in enumerate(unique_clusters)
+        }
+
+    i_correct = 0
+    for c in unique_clusters:
+        # Plot the correctly classified points
+        if c != -1:
+            # Either in grey
+            if correct_in_grey:
+                if i_correct == 0:
+                    ax.scatter(
+                        X[y_flagged == c, 0], X[y_flagged == c, 1],
+                        color='grey', marker='o', label=f'Correctly classified',
+                        **scatter_kwargs
+                    )
+                    i_correct += 1
+                else:
+                    ax.scatter(
+                        X[y_flagged == c, 0], X[y_flagged == c, 1],
+                        color='grey', marker='o', **scatter_kwargs
+                    )
+            # Or a different color for each cluster
+            else:
+                ax.scatter(
+                    X[y_flagged == c, 0], X[y_flagged == c, 1],
+                    color=color_map[c], marker='o', **scatter_kwargs
+                )
+
+    # Plot the misclassified points in red with a different marker
+    # We plot them at the end so that they are on top of the correctly classified points
+    ax.scatter(
+        X[y_flagged == -1, 0], X[y_flagged == -1, 1],
+        color='red', marker='x', label='Misclassified',
+        **scatter_kwargs
+    )
+
+    ax.set_xlabel("Feature 1")
+    ax.legend()
+    ax.set_ylabel("Feature 2")
+    return fig, ax
