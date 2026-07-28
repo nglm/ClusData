@@ -81,7 +81,7 @@ def set_misclassified(
 
         # Complete with zeros if needed
         elif len(misclassified) < N_clusters:
-            misclassified += [0.] * (N_clusters - len(misclassified))
+            misclassified = misclassified + [0.] * (N_clusters - len(misclassified))
 
     # Raise error if wrong type
     else:
@@ -194,7 +194,6 @@ def balanced(
     misclassified: float = 0.10,
     seed: int = 42,
     allow_same_closest: bool = False,
-    error_if_not_enough: bool = True,
     apply_misclassification_to_all_clusters: bool = True,
 ) -> LabelArray:
     """
@@ -218,9 +217,6 @@ def balanced(
         Seed passed to Python's random generator for reproducibility.
     allow_same_closest : bool, default=False
         Whether multiple source clusters may target the same closest cluster.
-    error_if_not_enough : bool, default=True
-        Whether to raise when a cluster contains fewer points than the number
-        requested for relabeling from that cluster.
     apply_misclassification_to_all_clusters : bool, default=True
         If ``True`` and if ``misclassified`` is a float, then applies
         the same misclassification rate to all clusters. If ``False``,
@@ -285,13 +281,6 @@ def balanced(
 
         # sort the indices in idx_c
         idx_c_sorted = np.argsort(distances_to_closest)
-
-        # Find the indices in idx from the argsort of idx_c
-        if N_misclassified_c > N_c and error_if_not_enough:
-            raise ValueError(
-                f"Not enough points in cluster {c} to misclassify "
-                f"{N_misclassified_c} points. Only {N_c} available."
-            )
 
         idx_misclassified_c = [
             idx_c[i]

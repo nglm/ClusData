@@ -62,12 +62,8 @@ def test_balanced():
     idx_y_0_to_change = idx_y_0[:len(idx_y_0)//2]
     y_error[idx_y_0_to_change] = 1
 
-    with pytest.raises(ValueError):
-        y_wrong = balanced(
-            X, y_error, misclassified=0.8, error_if_not_enough=True
-        )
     y_wrong = balanced(
-        X, y_error, misclassified=0.8, error_if_not_enough=False
+        X, y_error, misclassified=0.8,
     )
 
 def test_bully():
@@ -100,20 +96,22 @@ def test_subclustering():
     for method in ["grouped", "random"]:
         for misclassified in [0.1, [0.1, 0.2, 0.3]]:
             for misclassify_minority in [True, False]:
-                y_wrong = subclustering(
-                    X, y, method=method, misclassified=misclassified,
-                    misclassify_minority=misclassify_minority
-                )
+                for apply_misclassification_to_all_clusters in [True, False]:
+                    y_wrong = subclustering(
+                        X, y, method=method, misclassified=misclassified,
+                        misclassify_minority=misclassify_minority,
+                        apply_misclassification_to_all_clusters=apply_misclassification_to_all_clusters
+                    )
 
-                assert isinstance(y_wrong, np.ndarray)
-                assert y_wrong.shape == y.shape
-                assert len(np.unique(y_wrong)) > len(np.unique(y))
+                    assert isinstance(y_wrong, np.ndarray)
+                    assert y_wrong.shape == y.shape
+                    assert len(np.unique(y_wrong)) > len(np.unique(y))
 
-                # Check the new number of clusters
-                if isinstance(misclassified, list):
-                    assert len(np.unique(y_wrong)) == len(np.unique(y)) + len(misclassified)
-                else:
-                    assert len(np.unique(y_wrong)) == len(np.unique(y)) + 1
+                    # Check the new number of clusters
+                    if isinstance(misclassified, list):
+                        assert len(np.unique(y_wrong)) == len(np.unique(y)) + len(misclassified)
+                    elif isinstance(misclassified, float) and not apply_misclassification_to_all_clusters:
+                        assert len(np.unique(y_wrong)) == len(np.unique(y)) + 1
 
 def test_flag_misclassified():
     X, y = make_blobs(n_samples=100, centers=5, n_features=2, random_state=42)
