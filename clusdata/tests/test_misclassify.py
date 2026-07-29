@@ -5,7 +5,7 @@ from sklearn.datasets import make_blobs
 import matplotlib.pyplot as plt
 
 from clusdata.misclassify import (
-    full_random, balanced, bully, subclustering,
+    full_random, balanced, bully, subclustering, superclustering,
     flag_misclassified, plot_misclassified, set_misclassified,
 )
 
@@ -114,6 +114,39 @@ def test_subclustering():
                         assert len(np.unique(y_wrong)) == len(np.unique(y)) + 1
                     elif isinstance(misclassified, float) and apply_misclassification_to_all_clusters:
                         assert len(np.unique(y_wrong)) == 2*len(np.unique(y))
+
+def test_superclustering_agglomerative():
+    X, y = make_blobs(n_samples=100, centers=5, n_features=2, random_state=42)
+
+    n_classes = len(np.unique(y))
+
+    for misclassified in [0., 0.39, 0.81, 1]:
+        for is_upper_bound in [True, False]:
+
+            y_wrong = superclustering(
+                X,
+                y,
+                misclassified=misclassified,
+                method="agglomerative",
+                is_upper_bound=is_upper_bound,
+            )
+
+            assert isinstance(y_wrong, np.ndarray)
+            assert y_wrong.shape == y.shape
+            n_classes_wrong = len(np.unique(y_wrong))
+            assert n_classes_wrong <= n_classes
+            assert n_classes_wrong >= 1
+
+            # There is always at least one class merged in that case
+            if not is_upper_bound:
+                assert n_classes_wrong < n_classes
+
+            if misclassified == 0.39 and is_upper_bound:
+                assert n_classes_wrong == 4
+
+            if misclassified >= 0.81:
+                assert n_classes_wrong == 1
+
 
 def test_flag_misclassified():
     X, y = make_blobs(n_samples=100, centers=5, n_features=2, random_state=42)

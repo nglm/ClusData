@@ -591,6 +591,112 @@ def subclustering(
 
     return y_wrong
 
+def superclustering(
+    X: DataArray,
+    y: LabelArray,
+    misclassified: float = 0.10,
+    mapping: List[Tuple[List[int], int]] = [],
+    method: str = "pairwise",
+    seed: int = 42,
+    method_kwargs = {},
+    is_upper_bound: bool = True
+):
+    y_wrong = np.copy(y)
+    classes = sorted(np.unique(y).tolist())
+    N_c = {c: int(np.sum(y == c)) for c in classes}
+    N_to_misclassify = int(len(X) * misclassified)
+
+    if len(classes) <= 1:
+        return y_wrong
+    elif mapping:
+        for clusters_to_merge, new_label in mapping:
+            for c in clusters_to_merge:
+                y_wrong[y == c] = new_label
+        return y_wrong
+    elif method == "agglomerative":
+
+        # Build the hierarchy on the centroids of the original clusters.
+        #
+        # Although not optimal, this facilitate things as it allow us to
+        # start from datapoints instead of starting the agglomerative
+        # clustering from some pre-defined clusters
+        centroids = compute_centroids(X, y)
+
+        # Build the full agglomerative tree over the centroids.
+        # ``distance_threshold=0`` and ``n_clusters=None`` force sklearn
+        # to keep merging until a single tree is built, so we can stop
+        # later exactly when our misclassification budget is reached.
+        agglomerative = AgglomerativeClustering(
+            n_clusters=None,
+            distance_threshold=0,
+            compute_distances=True,
+            **method_kwargs,
+        )
+        agglomerative.fit(centroids)
+
+        # id_to_class: maps a tree node id to the set of original
+        # cluster labels it contains.
+        id_to_class: dict[int, set[int]] = {c: {c} for c in classes}
+
+        # merged_classes: tracks which original classes have already
+        # been absorbed into a supercluster
+        merged_classes: set[int] = set()
+
+        # Keep a running count of how many samples have been relabeled.
+        N_misclassified = 0
+
+        for merge_index, (left, right) in enumerate(agglomerative.children_):
+            left = int(left)
+            right = int(right)
+
+            # Retrieve the original clusters contained in the two child
+            # nodes being merged by the agglomerative tree.
+            classes_to_merge = id_to_class[left] | id_to_class[right]
+
+            # Find which label to keep based on the number of datapoints
+            # in each cluster
+            kept_label = None
+            for c in classes_to_merge:
+                if kept_label is None or N_c[c] >= N_c[kept_label]:
+                    kept_label = c
+
+            # newly_misclassified: number of points that are not
+            # already among the merged classes and that are not in the
+            # kept label.
+            newly_misclassified = sum(
+                N_c[c] for c in classes_to_merge
+                if c not in merged_classes and c != kept_label
+            )
+
+            # Check whether we should stop before completing this step.
+            if (
+                is_upper_bound
+                and N_misclassified + newly_misclassified > N_to_misclassify
+            ):
+                break
+
+            # Apply the new label to all merged clusters
+            for c in classes_to_merge:
+                y_wrong[y == c] = kept_label
+
+            # Update counters
+            merged_classes.update(classes_to_merge)
+            N_misclassified += newly_misclassified
+
+            # Register the newly created tree node so it can participate in
+            # later merges. sklearn uses node ids after the original leaves.
+            id_to_class[len(classes) + merge_index] = classes_to_merge
+
+            # In lower-bound mode we allow the final merge to cross the
+            # target, but we still stop as soon as the budget is reached.
+            if N_misclassified >= N_to_misclassify and not is_upper_bound:
+                break
+
+        return y_wrong
+    else:
+        raise NotImplementedError(f"Unsupported superclustering method: {method!r}")
+
+
 def flag_misclassified(
         y_true: LabelArray,
         y_wrong: LabelArray
