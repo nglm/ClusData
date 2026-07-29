@@ -116,9 +116,9 @@ def stats(
         Dictionary containing:
         - "N_total": Total number of samples.
         - "N_misclassified": Total number of misclassified samples.
-        - "fraction_misclassified": Fraction of misclassified samples.
+        - "misclassified": Fraction of misclassified samples.
         - "N_misclassified_per_cluster": Dictionary with the number of misclassified samples per cluster.
-        - "fraction_misclassified_per_cluster": Dictionary with the fraction of misclassified samples per cluster.
+        - "misclassified_per_cluster": Dictionary with the fraction of misclassified samples per cluster.
         - "new_clusters": Dictionary with the number of samples in new clusters (clusters present in y_wrong but not in y).
         - "missing_clusters": List of clusters present in y but not in y_wrong.
     """
@@ -143,9 +143,9 @@ def stats(
     stats_dict = {
         "N_total": N_total,
         "N_misclassified": N_misclassified,
-        "fraction_misclassified": fraction_misclassified,
+        "misclassified": fraction_misclassified,
         "N_misclassified_per_cluster": N_misclassified_c,
-        "fraction_misclassified_per_cluster": fraction_misclassified_c,
+        "misclassified_per_cluster": fraction_misclassified_c,
         "new_clusters": new_clusters,
         "missing_clusters" : missing_clusters,
     }
