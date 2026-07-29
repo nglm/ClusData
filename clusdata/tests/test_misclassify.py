@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 from clusdata.misclassify import (
     full_random, balanced, bully, subclustering, superclustering,
     flag_misclassified, plot_misclassified, set_misclassified,
+    stats,
 )
 
 def test_set_misclassified():
@@ -22,7 +23,18 @@ def test_set_misclassified():
             assert len(new_r) == 5
             assert all(isinstance(x, float) for x in new_r)
 
+def test_stats():
+    X, y = make_blobs(n_samples=100, centers=5, n_features=2, random_state=42)
 
+    for r in [0.1, [0.1, 0.2], [0.1, 0.2, 0.3, 0.4, 0.5]]:
+        for apply in [True, False]:
+            y_wrong = full_random(
+                X, y, misclassified=r, apply_misclassification_to_all_clusters=apply
+            )
+
+            stats_dict = stats(y, y_wrong)
+
+            assert isinstance(stats_dict, dict)
 
 
 def test_full_random():
