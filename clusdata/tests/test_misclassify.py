@@ -148,6 +148,54 @@ def test_superclustering_agglomerative():
                 assert n_classes_wrong == 1
 
 
+def test_superclustering_smallest():
+    X, y = make_blobs(n_samples=100, centers=5, n_features=2, random_state=42)
+
+    n_classes = len(np.unique(y))
+
+    for misclassified in [0.0, 0.39, 0.81, 1.0]:
+        for is_upper_bound in [True, False]:
+            y_wrong = superclustering(
+                X,
+                y,
+                misclassified=misclassified,
+                method="smallest",
+                is_upper_bound=is_upper_bound,
+            )
+
+            assert isinstance(y_wrong, np.ndarray)
+            assert y_wrong.shape == y.shape
+            n_classes_wrong = len(np.unique(y_wrong))
+            assert n_classes_wrong <= n_classes
+            assert n_classes_wrong >= 1
+
+            if not is_upper_bound:
+                assert n_classes_wrong < n_classes
+
+
+def test_superclustering_mapping():
+    X, y = make_blobs(n_samples=100, centers=5, n_features=2, random_state=42)
+
+    n_classes = len(np.unique(y))
+
+    superclusters = [[0, 1]]
+    N_classes_disappeared = sum(len(l) - 1 for l in superclusters)
+
+    y_wrong = superclustering(
+        X,
+        y,
+        superclusters=superclusters,
+        method="smallest",
+    )
+
+    n_classes_wrong = len(np.unique(y_wrong))
+
+    assert isinstance(y_wrong, np.ndarray)
+    assert y_wrong.shape == y.shape
+
+    assert n_classes_wrong == n_classes - N_classes_disappeared
+
+
 def test_flag_misclassified():
     X, y = make_blobs(n_samples=100, centers=5, n_features=2, random_state=42)
 

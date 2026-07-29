@@ -591,28 +591,229 @@ def subclustering(
 
     return y_wrong
 
+def _label_greatest_cluster(
+    classes: List[int],
+    N_c: List[int],
+) -> int:
+    """
+    Select the label of the largest cluster among candidate labels.
+
+    Given a list of cluster labels and a corresponding list containing
+    cluster sizes, return the label of the greatest number of
+    datapoints.
+
+    Parameters
+    ----------
+    classes : List[int]
+        Candidate cluster labels among which a representative label must
+        be selected.
+    N_c : List[int]
+        Cluster-size list indexed by label, where ``N_c[c]`` is the
+        number of datapoints in cluster ``c``.
+
+    Returns
+    -------
+    int
+        Label of the largest cluster in ``classes``.
+
+    Notes
+    -----
+    This helper assumes that all labels in ``classes`` are valid indices
+    for ``N_c``.
+    """
+
+    # Find which label to keep based on the number of datapoints
+    # in each cluster
+    kept_label = None
+    for c in classes:
+        if kept_label is None or N_c[c] >= N_c[kept_label]:
+            kept_label = c
+    return kept_label
+
 def superclustering(
     X: DataArray,
     y: LabelArray,
     misclassified: float = 0.10,
-    mapping: List[Tuple[List[int], int]] = [],
-    method: str = "pairwise",
-    seed: int = 42,
+    superclusters: List[List[int]] = [],
+    method: str = "agglomerative",
     method_kwargs = {},
     is_upper_bound: bool = True
-):
+) -> LabelArray:
+    """
+    Build coarser labelings by merging existing clusters.
+
+    This function starts from the original clusters in ``y`` and
+    produces a new label array where some clusters are merged together.
+    The global amount of relabeling is controlled with ``misclassified``
+    and ``is_upper_bound``.
+
+    There are three supported superclustering modes:
+
+    1) Explicit mapping (``superclusters`` argument) - If
+       ``superclusters`` is provided (non-empty), it takes priority over
+         ``method``.
+       - Each list ``([clusters_to_merge])`` forces all listed clusters
+         to receive the label with the greatest number of datapoints.
+       - This is a manual, fully user-defined merging strategy.
+
+    2) Size-based merging (``method="smallest"``) - Repeatedly merges
+       the two current smallest clusters/superclusters. - After each
+       merge, the merged supercluster size is updated and used
+         for the next ordering step.
+       - Distances are ignored on purpose; this yields intentionally
+         naive superclustering examples.
+
+    3) Hierarchical centroid merging (``method="agglomerative"``) -
+       Computes one centroid per original cluster. - Runs
+       ``sklearn.cluster.AgglomerativeClustering`` on those centroids
+         to obtain a merge tree.
+       - Replays tree merges until the requested misclassification
+         budget is reached (or just before crossing it when
+         ``is_upper_bound=True``).
+       - ``method_kwargs`` are forwarded to ``AgglomerativeClustering``.
+
+    Misclassification accounting
+    ----------------------------
+    Let ``N_to_misclassify = int(len(X) * misclassified)``. - If
+    ``is_upper_bound=True``, the function stops before a merge that
+      would exceed ``N_to_misclassify``.
+    - If ``is_upper_bound=False``, the function keeps merging until the
+      budget is reached or crossed.
+
+    Parameters
+    ----------
+    X : NDArray[np.float64]
+        Dataset of shape ``(n_samples, n_features)``.
+    y : NDArray[np.int_]
+        Ground-truth cluster labels encoded as integers.
+    misclassified : float, default=0.10
+        Target global fraction of samples that should become relabeled
+        after cluster merges.
+    superclusters : List[List[int]], default=[]
+        Optional explicit merge specification. If non-empty, overrides
+        ``method``.
+    method : str, default="agglomerative"
+        Automatic merge strategy when ``mapping`` is empty. Supported
+        values are ``"smallest"`` and ``"agglomerative"``.
+    method_kwargs : dict, default={}
+        Extra keyword arguments forwarded to
+        ``sklearn.cluster.AgglomerativeClustering`` when
+        ``method="agglomerative"``.
+    is_upper_bound : bool, default=True
+        Whether to treat ``misclassified`` as an upper bound (strict
+        stop before crossing) or as a lower bound (allow final
+        crossing).
+
+    Returns
+    -------
+    LabelArray
+        Copy of ``y`` after superclustering merges.
+
+    Raises
+    ------
+    NotImplementedError
+        If ``method`` is not supported.
+    """
     y_wrong = np.copy(y)
     classes = sorted(np.unique(y).tolist())
+
+    # Number of datapoints in original clusters
     N_c = {c: int(np.sum(y == c)) for c in classes}
+
+    # Threshold in terms of number of datapoints to misclassify
     N_to_misclassify = int(len(X) * misclassified)
+
+    # Keep a running count of how many samples have been relabeled.
+    N_misclassified = 0
 
     if len(classes) <= 1:
         return y_wrong
-    elif mapping:
-        for clusters_to_merge, new_label in mapping:
-            for c in clusters_to_merge:
-                y_wrong[y == c] = new_label
-        return y_wrong
+    elif superclusters:
+        # Explicit mapping
+        for classes_to_merge in superclusters:
+
+            # Find which label to keep based on the number of datapoints
+            kept_label = _label_greatest_cluster(classes_to_merge, N_c)
+
+            for c in classes_to_merge:
+                y_wrong[y == c] = kept_label
+
+    elif method == "smallest":
+        # Keep merging together the smallest clusters as long as we have
+        # not reached the final number of misclassified points.
+        #
+        # After merging 2 clusters together, it is their new number of
+        # datapoints that count in the ordering of the next clusters to
+        # merge together Note that this method doesn't take into account
+        # the distances between the clusters, but this is on purpose, to
+        # get examples of superclustering that are not good
+        # superclustering.
+
+        # components: each component (index in list) represent a (super)class
+        components: list[set[int]] = [{c} for c in classes]
+        # component_sizes: actual size of the (super)classes
+        component_sizes: list[int] = [N_c[c] for c in classes]
+        # sorted_comp: argsort of the components based on their size
+        sorted_comp: list[int] = []
+        # merged_classes: tracks which original classes have already
+        # been absorbed into a supercluster
+        merged_classes: set[int] = set()
+
+        while len(components) > 1:
+
+            # Update the order of the components based on their current sizes
+            sorted_comp = sorted(
+                range(len(component_sizes)), key=lambda i: component_sizes[i]
+            )
+            # Pick the two smallest current components.
+            i_smallest, j_smallest = sorted_comp[0], sorted_comp[1]
+            # Get the classes represented by the components to merge
+            classes_to_merge = components[i_smallest] | components[j_smallest]
+
+            # Find which label to keep based on the number of datapoints
+            kept_label = _label_greatest_cluster(classes_to_merge, N_c)
+
+            # newly_misclassified: number of points that are not
+            # already among the merged classes and that are not in the
+            # kept label.
+            newly_misclassified = sum(
+                N_c[c] for c in classes_to_merge
+                if c not in merged_classes and c != kept_label
+            )
+
+            # Check whether we should stop before completing this step.
+            if (
+                is_upper_bound
+                and N_misclassified + newly_misclassified > N_to_misclassify
+            ):
+                break
+
+            # Apply the new label to all merged clusters
+            for c in classes_to_merge:
+                y_wrong[y == c] = kept_label
+
+            # Update counters
+            merged_classes.update(classes_to_merge)
+            N_misclassified += newly_misclassified
+
+            # ----------- Update components ---------------
+            merged_size = component_sizes[i_smallest] + component_sizes[j_smallest]
+            # Remove components that were merged
+            # Note that we need to remove the largest index first as to
+            # not perturb the index of the second one
+            for idx_to_remove in sorted((i_smallest, j_smallest), reverse=True):
+                del components[idx_to_remove]
+                del component_sizes[idx_to_remove]
+
+            # Add the resulting super component
+            components.append(classes_to_merge)
+            component_sizes.append(merged_size)
+
+            # In lower-bound mode we allow the final merge to cross the
+            # target, but we still stop as soon as the budget is reached.
+            if N_misclassified >= N_to_misclassify and not is_upper_bound:
+                break
+
     elif method == "agglomerative":
 
         # Build the hierarchy on the centroids of the original clusters.
@@ -642,9 +843,6 @@ def superclustering(
         # been absorbed into a supercluster
         merged_classes: set[int] = set()
 
-        # Keep a running count of how many samples have been relabeled.
-        N_misclassified = 0
-
         for merge_index, (left, right) in enumerate(agglomerative.children_):
             left = int(left)
             right = int(right)
@@ -654,11 +852,7 @@ def superclustering(
             classes_to_merge = id_to_class[left] | id_to_class[right]
 
             # Find which label to keep based on the number of datapoints
-            # in each cluster
-            kept_label = None
-            for c in classes_to_merge:
-                if kept_label is None or N_c[c] >= N_c[kept_label]:
-                    kept_label = c
+            kept_label = _label_greatest_cluster(classes_to_merge, N_c)
 
             # newly_misclassified: number of points that are not
             # already among the merged classes and that are not in the
@@ -683,6 +877,7 @@ def superclustering(
             merged_classes.update(classes_to_merge)
             N_misclassified += newly_misclassified
 
+            # ------------------ Update tree map ----------------------
             # Register the newly created tree node so it can participate in
             # later merges. sklearn uses node ids after the original leaves.
             id_to_class[len(classes) + merge_index] = classes_to_merge
@@ -692,9 +887,9 @@ def superclustering(
             if N_misclassified >= N_to_misclassify and not is_upper_bound:
                 break
 
-        return y_wrong
     else:
         raise NotImplementedError(f"Unsupported superclustering method: {method!r}")
+    return y_wrong
 
 
 def flag_misclassified(
