@@ -11,14 +11,14 @@ different cluster validity indices, etc.
   - Failed like KMeans (have 3 attractor outside the circles)
 """
 
-from typing import Union, List
+from typing import Union, List, Tuple, Dict
 
 import numpy as np
 from numpy.typing import NDArray
 import random
 import matplotlib
 from matplotlib import pyplot as plt
-
+from sklearn.cluster import AgglomerativeClustering
 from .utils import compute_centroids
 
 
@@ -96,6 +96,61 @@ def set_misclassified(
         )
     return misclassified
 
+def stats(
+    y: LabelArray,
+    y_wrong: LabelArray
+) -> dict:
+    """
+    Compute statistics on the misclassified samples between two label arrays.
+
+    Parameters
+    ----------
+    y : NDArray[np.int_]
+        Ground-truth cluster labels encoded as integers.
+    y_wrong : NDArray[np.int_]
+        Predicted cluster labels encoded as integers.
+
+    Returns
+    -------
+    dict
+        Dictionary containing:
+        - "N_total": Total number of samples.
+        - "N_misclassified": Total number of misclassified samples.
+        - "fraction_misclassified": Fraction of misclassified samples.
+        - "N_misclassified_per_cluster": Dictionary with the number of misclassified samples per cluster.
+        - "fraction_misclassified_per_cluster": Dictionary with the fraction of misclassified samples per cluster.
+        - "new_clusters": Dictionary with the number of samples in new clusters (clusters present in y_wrong but not in y).
+        - "missing_clusters": List of clusters present in y but not in y_wrong.
+    """
+    classes = np.unique(y)
+    classes_y_wrong = np.unique(y_wrong)
+    new_clusters = {
+        c: np.sum(y_wrong == c) for c in classes_y_wrong if c not in classes
+    }
+    missing_clusters = [c for c in classes if c not in classes_y_wrong]
+
+    N_total = len(y)
+    N_misclassified = np.sum(y != y_wrong)
+    fraction_misclassified = N_misclassified / N_total
+
+    N_misclassified_c = {
+        c: np.sum((y == c) & (y_wrong != c)) for c in classes
+    }
+    fraction_misclassified_c = {
+        c : N_misclassified_c[c] / np.sum(y == c) for c in classes
+    }
+
+    stats_dict = {
+        "N_total": N_total,
+        "N_misclassified": N_misclassified,
+        "fraction_misclassified": fraction_misclassified,
+        "N_misclassified_per_cluster": N_misclassified_c,
+        "fraction_misclassified_per_cluster": fraction_misclassified_c,
+        "new_clusters": new_clusters,
+        "missing_clusters" : missing_clusters,
+    }
+
+    return stats_dict
 
 def full_random(
     X: DataArray,
